@@ -1,44 +1,83 @@
 import mysql.connector
 import pandas as pd
 import numpy as np
+import os
 
-# Connect to MySQL
-conn = mysql.connector.connect(
-    host="localhost",
-    user="root",  # Change if your MySQL user is different
-    password="PipeDream_25",  # Replace with your MySQL password
-    database="cycling_data"
-)
+# ✅ Load credentials from environment variables
+MYSQL_USER = os.getenv("MYSQL_USER")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE")
+MYSQL_HOST = os.getenv("MYSQL_HOST")
 
-cursor = conn.cursor()
+# ✅ Ensure all environment variables are set
+if not all([MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MYSQL_HOST]):
+    raise ValueError("❌ Missing one or more required MySQL environment variables!")
 
-# Read the updated CSV file
-df = pd.read_csv("data/tour_de_france_2023_stage1.csv")
+try:
+    # ✅ Connect to MySQL
+    conn = mysql.connector.connect(
+        host=MYSQL_HOST,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DATABASE
+    )
+    cursor = conn.cursor()
+    print("✅ Successfully connected to MySQL!")
 
-# ✅ Trim spaces from column names to prevent hidden errors
-df.columns = df.columns.str.strip()
+    # ✅ Read the updated CSV file
+    df = pd.read_csv("data/tour_de_france_2023_stage1.csv")
 
-# ✅ Convert NaN values to None (so MySQL treats them as NULL)
-df = df.replace({np.nan: None})
+    # ✅ Trim spaces from column names to prevent hidden errors
+    df.columns = df.columns.str.strip()
 
-# ✅ Print preview to verify NaN values are replaced
-print("✅ Preview of Data Before Insertion (After NaN Fix):")
-print(df.head())
+    # ✅ Convert numeric columns to proper data types
+    df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
+    df["Avg Speed"] = pd.to_numeric(df["Avg Speed"], errors="coerce")
+    df["Elevation Gain"] = pd.to_numeric(df["Elevation Gain"], errors="coerce")
 
-# Insert data into MySQL
-for _, row in df.iterrows():
-    cursor.execute("""
-        INSERT INTO race_results (position, rider, team, time, avg_speed, elevation_gain, stage_type, weather_conditions, time_difference) 
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """, (
-        row["Position"], row["Rider"], row["Team"], row["Time"], row["Avg Speed"], 
-        row["Elevation Gain"], row["Stage Type"], row["Weather Conditions"], row["Time Difference"]
-    ))
+    # ✅ Convert NaN values explicitly to None (so MySQL treats them as NULL)
+    df = df.where(pd.notna(df), None)
 
-# Commit the transaction
-conn.commit()
-print("✅ Data successfully saved with new race details!")
+    # ✅ Print preview to verify NaN values are replaced
+    print("✅ Preview of Data Before Insertion (After NaN Fix):")
+    print(df.head())
 
-# Close the connection
-cursor.close()
-conn.close()
+    # ✅ Insert data into MySQL
+    for _, row in df.iterrows():
+        try:
+            # ✅ Ensure numeric NaN values are converted to None before insertion
+            row_data = [
+                row["Position"],
+                row["Rider"],
+                row["Team"],
+                row["Time"],
+                row["Avg Speed"],
+                None if pd.isna(row["Elevation Gain"]) else row["Elevation Gain"],
+                row["Stage Type"],
+                row["Weather Conditions"],
+                row["Time Difference"]
+            ]
+
+            print("🔹 Inserting row:", row_data)  # ✅ Print each row before inserting
+            
+            cursor.execute("""
+                INSERT INTO race_results (position, rider, team, time, avg_speed, elevation_gain, stage_type, weather_conditions, time_difference) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, row_data)
+        
+        except mysql.connector.Error as err:
+            print(f"❌ MySQL Error inserting row {row_data}: {err}")
+
+    # ✅ Commit the transaction
+    conn.commit()
+    print("✅ Data successfully saved with new race details!")
+
+except mysql.connector.Error as err:
+    print(f"❌ MySQL Connection Error: {err}")
+
+finally:
+    # ✅ Close the connection
+    if 'cursor' in locals():
+        cursor.close()
+    if 'conn' in locals():
+        conn.close()
