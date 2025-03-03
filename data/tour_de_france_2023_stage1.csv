@@ -1,4 +1,5 @@
-Position,Rider,Team,Time,Avg Speed
+Position,Rider,Team,Time,Avg Speed,Elevation Gain,Stage Type,Weather Conditions,Time Difference
+
 1,Tadej Pogacar,UAE Team Emirates,4h 20m 10s,45.6
 2,Jonas Vingegaard,Jumbo-Visma,4h 20m 15s,45.4
 3,Remco Evenepoel,Soudal-QuickStep,4h 20m 20s,45.2
